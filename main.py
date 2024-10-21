@@ -1,42 +1,29 @@
 import logging
-from pymilvus import MilvusClient
-from langchain_openai import ChatOpenAI, OpenAI
+from langchain_openai import ChatOpenAI, OpenAI, OpenAIEmbeddings
+from langchain_chroma import Chroma
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
+os.environ.get()
 
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
-os.environ.get()
 
 
 DB_NAME = "airene_memory"
-OPENAI_KEY = os.getenv("OPENAI_API")
+OPENAI_API_KEY = os.getenv("OPENAI_API")
 
 llm = OpenAI()
-chat_model = ChatOpenAI(api_key=OPENAI_KEY, model="gpt-3.5-turbo-0125")
+chat_model = ChatOpenAI(api_key=OPENAI_API_KEY, model="gpt-3.5-turbo-0125")
+embeddings = OpenAIEmbeddings(
+    api_key=OPENAI_API_KEY, model="text-embedding-3-large")
 
-client = MilvusClient(DB_NAME)
-
-if not client.has_collection("people"):
-    client.create_collection(
-        collection_name="people",
-        dimension=384
-    )
-    logging.info("Created collection 'people'")
-
-
-def search_memory(collection, search_string: str) -> list:
-    output = client.search(
-        collection_name=collection,
-
-    )
-    return output
-
-
-def add_memory(memories: list):
-    ...
+vector_store = Chroma(
+    collection_name="memory",
+    embedding_function=embeddings,
+    persist_directory="./chroma_db"
+)
 
