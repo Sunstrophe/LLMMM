@@ -1,11 +1,14 @@
 import logging
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_chroma import Chroma
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+import json
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, MessagesState, StateGraph
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_chroma import Chroma
 import os
 from dotenv import load_dotenv
+
+from tools import RemeberTool
 
 load_dotenv()
 
@@ -17,9 +20,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-
-# llm = OpenAI()
-chat_model = ChatOpenAI(api_key=OPENAI_API_KEY, model="gpt-3.5-turbo-0125")
 embeddings = OpenAIEmbeddings(
     api_key=OPENAI_API_KEY, model="text-embedding-3-large")
 
@@ -29,53 +29,69 @@ vector_store = Chroma(
     persist_directory="./chroma_db"
 )
 
-system_message = SystemMessage(content="You are a helpful AI assistant.")
+
+llm = ChatOpenAI(api_key=OPENAI_API_KEY, model="gpt-3.5-turbo-0125")
+
+llm.bind_tools([RemeberTool])
+
+# Define a new graph
+workflow = StateGraph(state_schema=MessagesState)
 
 
+# Define the function that calls the model
 def call_model(state: MessagesState):
-    res = chat_model.invoke(state["messages"])
-    return {"messages": res}
+    response = llm.invoke(state["messages"])
+    # Update message history with response:
+    return {"messages": response}
 
 
-def conversation_history(message: str):
-    ...
+# Define the (single) node in the graph
+workflow.add_edge(START, "model")
+workflow.add_node("model", call_model)
+
+# Add memory
+memory = MemorySaver()
+app = workflow.compile(checkpointer=memory)
+
+config = {"configurable": {"thread_id": "abc123"}}
+
+log_directory = ".logs"
+
+if not os.path.exists(log_directory):
+    os.makedirs(log_directory)
 
 
-def embed_queries(queries: list[dict]):
-    for query in queries:
-        message = query["message"]
-        vector_store.add_texts(texts=message, metadatas=query["time"])
-        logging.debug(f"Added {query} to the database")
-
-
-def prompt_ai(message: str) -> AIMessage:
-    prompt = [
-        system_message,
-        HumanMessage(content=message)
-    ]
-    res = chat_model.invoke(prompt)
-    return res
+def dump_history(messages: list):
+    dumpable_messages = []
+    for message in messages:
+        if isinstance(message, HumanMessage):
+            dumpable_messages.append({
+                "type": "human",
+                "content": message.content
+            })
+        elif isinstance(message, AIMessage):
+            dumpable_messages.append({
+                "type": "ai",
+                "content": message.content
+            })
+        else:
+            dumpable_messages.append({
+                "type": "other",
+                "content": message.content
+            })
+    history = json.dumps(dumpable_messages, indent=4)
+    with open(".logs/history.json", "w") as file:
+        file.write(history)
 
 
 if __name__ == "__main__":
-    print("Input commands below: ")
-    while True:
-        message = input("")
-        res = prompt_ai(message)
-        print("---")
-        print(res)
-        print("---")
-        print(type(res))
-
-
-"""
----
-content='The Earth is round due to its gravitational forces pulling towards its center, which causes it to form a spherical shape. 
-This shape is known as an oblate spheroid, slightly flattened at the poles and bulging at the equator.' 
-additional_kwargs={'refusal': None} response_metadata={'token_usage': {'completion_tokens': 48, 'prompt_tokens': 24, 'total_tokens': 72, 
-'completion_tokens_details': {'audio_tokens': None, 'reasoning_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': None, 'cached_tokens': 0}},
- 'model_name': 'gpt-3.5-turbo-0125', 'system_fingerprint': None, 'finish_reason': 'stop', 'logprobs': None} id='run-73dd1bdc-51ef-42f1-9b61-6f0e9e2886e3-0' 
-usage_metadata={'input_tokens': 24, 'output_tokens': 48, 'total_tokens': 72, 'input_token_details': {'cache_read': 0}, 'output_token_details': {'reasoning': 0}}
----
-<class 'langchain_core.messages.ai.AIMessage'>
-"""
+    print("Welcome to my chatbot. Enter below to start talking.")
+    try:
+        while True:
+            query = input("")
+            input_messages = [HumanMessage(query)]
+            output = app.invoke({"messages": input_messages}, config)
+            # output contains all messages in state
+            output["messages"][-1].pretty_print()
+    finally:
+        dump_history(output["messages"])
