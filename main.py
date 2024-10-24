@@ -1,20 +1,22 @@
 import logging
-from langchain_openai import ChatOpenAI, OpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import START, MessagesState, StateGraph
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
+DB_NAME = "airene_memory"
+OPENAI_API_KEY = os.getenv("OPENAI_API")
 
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-
-DB_NAME = "airene_memory"
-OPENAI_API_KEY = os.getenv("OPENAI_API")
 
 # llm = OpenAI()
 chat_model = ChatOpenAI(api_key=OPENAI_API_KEY, model="gpt-3.5-turbo-0125")
@@ -30,6 +32,11 @@ vector_store = Chroma(
 system_message = SystemMessage(content="You are a helpful AI assistant.")
 
 
+def call_model(state: MessagesState):
+    res = chat_model.invoke(state["messages"])
+    return {"messages": res}
+
+
 def conversation_history(message: str):
     ...
 
@@ -41,7 +48,7 @@ def embed_queries(queries: list[dict]):
         logging.debug(f"Added {query} to the database")
 
 
-def prompt_ai(message: str):
+def prompt_ai(message: str) -> AIMessage:
     prompt = [
         system_message,
         HumanMessage(content=message)
@@ -59,7 +66,8 @@ if __name__ == "__main__":
         print(res)
         print("---")
         print(type(res))
-        
+
+
 """
 ---
 content='The Earth is round due to its gravitational forces pulling towards its center, which causes it to form a spherical shape. 
