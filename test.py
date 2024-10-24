@@ -41,6 +41,11 @@ app = workflow.compile(checkpointer=memory)
 
 config = {"configurable": {"thread_id": "abc123"}}
 
+log_directory = ".logs"
+
+if not os.path.exists(log_directory):
+    os.makedirs(log_directory)
+
 
 def dump_history(messages: list):
     dumpable_messages = []
@@ -61,7 +66,7 @@ def dump_history(messages: list):
                 "content": message.content
             })
     history = json.dumps(dumpable_messages, indent=4)
-    with open(".logs/history.log", "w") as file:
+    with open(".logs/history.json", "w") as file:
         file.write(history)
 
 
