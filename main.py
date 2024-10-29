@@ -8,7 +8,7 @@ from langchain_chroma import Chroma
 import os
 from dotenv import load_dotenv
 
-from tools import RemeberTool
+from tools import RememberTool
 
 load_dotenv()
 
@@ -29,10 +29,11 @@ vector_store = Chroma(
     persist_directory="./chroma_db"
 )
 
+remember_tool = RememberTool(vector_db=vector_store)
 
 llm = ChatOpenAI(api_key=OPENAI_API_KEY, model="gpt-3.5-turbo-0125")
 
-llm.bind_tools([RemeberTool])
+llm.bind_tools([RememberTool])
 
 # Define a new graph
 workflow = StateGraph(state_schema=MessagesState)

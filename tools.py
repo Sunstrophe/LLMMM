@@ -1,24 +1,28 @@
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, PrivateAttr
 from langchain_chroma import Chroma
-from typing import Type
+from typing import Type, Optional
 from langchain_core.documents import Document
+from langchain_core.callbacks.manager import CallbackManagerForToolRun
 
 
-class RemeberInput(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed="True")
-    vector_db: Chroma = Field(description="Our database to search in.")
+class RememberInput(BaseModel):
     query: str = Field(
-        description="Our query for what we search the answer to.")
-    
+        description="The query for what we search the answer to.")
 
-class RemeberTool(BaseTool):
-    name: str = "Remeber"
-    description: str = "Used when we want to think and remeber something that we might have known before."
-    args_schema: Type[BaseModel] = RemeberInput
-    return_direct: list[Document]
 
-    def _run(self, vector_db: Chroma, query: str) -> list[Document]:
-        res = vector_db.similarity_search(query=query)
+class RememberTool(BaseTool):
+    name: str = "Remember"
+    description: str = "Used when we want to think and remember something that we might have known before."
+    args_schema: Type[BaseModel] = RememberInput
+    return_direct: bool = True
+
+    _vector_db: Chroma = PrivateAttr()
+
+    def __init__(self, vector_db: Chroma, **kwargs):
+        super().__init__(**kwargs)
+        self._vector_db = vector_db
+
+    def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> list[Document]:
+        res = self.vector_db.similarity_search(query=query)
         return res
-
